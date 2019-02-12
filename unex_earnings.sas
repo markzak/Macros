@@ -132,8 +132,7 @@ having
 quit;
 
 /*cleanup*/
-proc sort data=&dsout; by gvkey datadate_fundq descending dat_diff; run;
-proc sort data=&dsout nodupkey; by  gvkey datadate_fundq;run; 
+proc sort data=&dsout nodupkey; by  gvkey datadate_fundq;run;  
 proc datasets library=work; delete aa_1; quit;
 
 %end;
@@ -288,7 +287,7 @@ quit;
 	%eventReturn(dsin=d_beta, dsout=e_ret, eventdate=ann_dt, start=-1, end=2, varname=abnret);
 */
 
-%macro eventReturn(dsin=, dsout=, eventdate=, start=0, end=1, varname=car);
+%macro eventReturn(dsin=, dsout=, eventdate=, start=0, end=, varname=car);
 
 data er_1 (keep = key permno beta &eventdate);
 set &dsin;
@@ -303,7 +302,7 @@ proc sql; create table er_2 as select distinct date from crsp.dsf;quit;
 data er_2; set er_2; count = _N_;run;
 
 /* window size in trading days */
-%let windowSize = %eval(&end - &start); 
+%let windowSize = dat_diff; 
 
 /* get the closest event window returns, using trading days */
 proc sql;
@@ -312,7 +311,7 @@ proc sql;
 	from er_1 a, er_2 b	
 	/* enforce 'lower' end of window: trading day must be on/after event (not before)
 		using +10 to give some slack at the upper end */
-	where b.date >= (a.&eventdate + &start) and b.date <=(a.&eventdate + &end + 10)
+	where b.date >= (a.&eventdate + &start) and b.date <=(a.&eventdate + dat_diff +10)
 	group by key
 	/* enforce 'upper' end of window: minimum count + windowsize must equal maximum count */
 	having min (b.count) + &windowSize <= b.count;
