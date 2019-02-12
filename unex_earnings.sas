@@ -131,6 +131,9 @@ having
 	dat_diff = min(dat_diff) ;
 quit;
 
+/*cleanup*/
+proc sort data=&dsout nodupkey; by  gvkey datadate_fundq;run;  
+proc datasets library=work; delete aa_1; quit;
 
 %end;
 
