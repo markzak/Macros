@@ -132,7 +132,8 @@ having
 quit;
 
 /*cleanup*/
-proc sort data=&dsout nodupkey; by  gvkey datadate_fundq;run;  
+proc sort data=&dsout; by gvkey datadate_fundq descending dat_diff; run;
+proc sort data=&dsout nodupkey; by  gvkey datadate_fundq;run; 
 proc datasets library=work; delete aa_1; quit;
 
 %end;
