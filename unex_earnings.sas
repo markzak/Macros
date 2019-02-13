@@ -289,7 +289,7 @@ quit;
 
 %macro eventReturn(dsin=, dsout=, eventdate=, start=0, end=, varname=car);
 
-data er_1 (keep = key permno beta &eventdate);
+data er_1 (keep = key permno beta &eventdate dat_diff);
 set &dsin;
 if &eventdate ne .;
 if beta ne .;
