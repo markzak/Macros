@@ -1,0 +1,151 @@
+/****************************************************************************************************/
+/* FileName: DecileSortMacro                                                                        */
+/* Date: Summer 2011                                                                                */
+/* Author:  Joseph Pacelli                                                                          */
+/* Description:                                                                                     */
+/*                                                                                                  */
+/*      This Macro applies decile sorts to financial variables using the following methodology:     */
+/*          1. The program ranks all observations into deciles for the time range the user chooses  */
+/*              (for example, daily, monthly, annual, etc.) using the base for the sort that        */
+/*              the user specifies (for example, NYSE firms only)                                   */
+/*              For example, the user may choose to create decile rankings each month for all NYSE  */
+/*              firms and then compare this to the universe of all firms.                           */
+/*          2. For each time frequency set above, the program sets cutoff points for the deciles at */
+/*              each point in time, and then creates the ranges for each rank                       */
+/*          3. The program sorts all observations that the user would like to compare into deciles  */
+/*              at each specified point in time.                                                    */
+/*          4. The macro finds the average of each decile's obsevations at each point in time       */
+/*          5. The macro finds the average of each decile across the entire time series specified   */
+/*                                                                                                  */
+/* Variables:                                                                                       */
+/*          datadec     : data to be used for decile sorts                                          */
+/*          datasamp    : full sample that will be used sorted into deciles (Note: may = datadec    */
+/*          date        : date variable for frequency of sort(e.g., month, year, day, etc.)         */
+/*          var         : variable that sort should be performed on                                 */
+/*          id          : variable for obs identification (e.g., permno, gvkey, etc.)               */
+/*                                                                                                  */
+/* Input Datasets:                                                                                  */
+/*          datadec     : Dataset should contain date, id, and var sorted                           */
+/*          datasamp    : Dataset should contain date, id, and var sorted                           */
+/*      NOTE: Make sure data is in same units before running                                        */
+/*      CURRENT VERSION REQUIRES DATA SORTED IN ASCENDING ORDER BY DATE VARIABLE!!!!!!!!!!!!!       */
+/****************************************************************************************************/
+ 
+ 
+%macro decilesort (datadec=, datasamp=, date=, var=, id=);
+ 
+/* Rank all firms into deciles by month */
+proc rank data = &datadec groups = 10 out = m1;
+    ranks &var.rank;
+    by &date;
+    var &var;
+run;
+ 
+/* Get cutoff points for each month */
+proc sort data = m1 out = m2;
+    by &date &var;
+run;
+ 
+/* Create rank ranges for each month */
+ 
+proc sql;
+    create table m3 as select
+    &date, &var.rank, max(&var) as endrange
+    from m2
+    group by &date, &var.rank
+    order by &date, &var.rank;
+quit;
+ 
+/* Rename ranks for decile and set end range (Note: I set an arbitrarily high end range for decile 10
+    and an abitrarily low begrange for decile 1 */
+ 
+data m4;
+    set m3;
+    by &date &var.rank;
+    if &var.rank = 0    then    dec =   1;
+    if &var.rank = 1    then    dec =   2;
+    if &var.rank = 2    then    dec =   3;
+    if &var.rank = 3    then    dec =   4;
+    if &var.rank = 4    then    dec =   5;
+    if &var.rank = 5    then    dec =   6;
+    if &var.rank = 6    then    dec =   7;
+    if &var.rank = 7    then    dec =   8;
+    if &var.rank = 8    then    dec =   9;
+    if &var.rank = 9    then    dec =   10;
+    l1er = lag(endrange);
+    if first.&date then begrange = -999999999999999;
+        else begrange = l1er;
+    if dec = 10 then endrange = 999999999999999;
+    drop &var.rank l1er;
+run;
+ 
+/* Rank all firms from sample into deciles based on the basis chosen */
+/*remove *1000*/
+proc sql;
+    create table m5 as select
+    a.*, b.dec
+    from &datasamp as a left join m4 as b
+    on a.&date = b.&date and
+    (b.begrange <= a.&var < b.endrange)
+    order by a.&date, b.dec, a.&var;
+quit;
+ 
+ 
+/* Calculate total number of obs at each date */
+ 
+proc sql;
+    create table m6 as select
+    &date, count(&id) as total
+    from m5
+    group by &date;
+quit;
+ 
+/* Find average of all firms in each decile at each time */
+ 
+proc sql;
+    create table m7 as select
+    a.&date, a.dec, avg(a.&var) as &var,
+    (count(a.&id)/total) as percount format percent5.1
+    from m5 as a, m6 as b
+    where a.&date = b.&date
+    group by a.dec, a.&date
+    order by a.&date, a.dec;
+quit;
+ 
+proc sort data = m7 nodupkey;
+    by &date dec &var;
+run;
+ 
+/* Find average over all time */
+ 
+proc sql;
+    create table m8 as select
+    dec, avg(&var) as &var, avg(percount) as percount format percent5.1
+    from m7
+    group by dec
+    order by dec;
+quit;
+ 
+/* Find overall average of sample (non-decile) */
+ 
+proc sql;
+    create table m9 as select
+    &date, avg(&var) as &var
+    from &datasamp
+    group by &date;
+quit;
+ 
+proc means data = m9 noprint mean maxdec = 0;
+    var &var;
+    output out = m10 (drop = _type_ _freq_ ) mean = &var;
+run;
+ 
+/* Set Final Data sample */
+data final;
+    set m8 m10;
+    if missing (dec) then percount =1;
+    format percount percent5.1;
+    format &var comma30.;
+run;
+ 
+%mend decilesort;
