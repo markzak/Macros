@@ -424,3 +424,43 @@ data &dsetout;
 %mend winsor;
 
 
+
+
+/*cleantable Macro by Mark*/
+
+
+rsubmit;
+%macro CleanTable(dsin=, dsout=, Vars=, ByVar=,ByCategories=);
+
+/* descriptive statistics -- creates one row with all data*/
+proc sort data=&dsin; by &ByVar;run;
+proc means data=&dsin NOPRINT;
+OUTPUT OUT=n_0 (drop= _type_ _freq_) mean= p10= p25= p50= p75= p90= N=/autoname;
+var &Vars;
+Class &ByVar;
+run;
+
+/* convert it to a table format */
+proc transpose data=n_0 out=n_1;
+run;
+data n_2;
+set n_1;
+varname=scan(_name_,1,'_');
+stat=scan(_name_,2,'_');
+drop _name_;
+run;
+proc sort data=n_2;
+by varname;
+run;
+proc transpose data=n_2 out=&dsout(drop=_name_);
+by varname;
+id stat;
+var col1-col&ByCategories;
+run;
+/*cleanup*/
+proc datasets library=work; delete n_0 - n_2; quit;
+
+%mend;
+
+
+
