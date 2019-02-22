@@ -429,7 +429,7 @@ data &dsetout;
 /*cleantable Macro by Mark*/
 
 
-rsubmit;
+
 %macro CleanTable(dsin=, dsout=, Vars=, ByVar=,ByCategories=);
 
 /* descriptive statistics -- creates one row with all data*/
