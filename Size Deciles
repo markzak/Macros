@@ -29,3 +29,102 @@ run;
 proc datasets library=work; delete n_0 - n_2; quit;
 
 %mend;
+
+
+
+
+
+%macro PortfolioPeriod(dsin=, dsout=, FirstMonth=, FirstYear=);
+
+
+
+
+%let start="&FirstMonth";
+
+data n_0; set &dsin;run;
+proc sort data=n_0; by gvkey year month ;run;
+
+/*this code removes observations where data for the firm is not available at portfolio formation (at the end of May),
+	does not apply to port_year=0 since that will be taken out later*/
+
+proc sql; 
+	create table n_1
+	as select a.*, b.month as month_1
+	from n_0 a left join n_0 b
+	on a.gvkey eq b.gvkey and a.year eq b.year and a.month-1 eq b.month
+	order by gvkey, year, month;
+	quit;
+run; 
+proc sql; 
+	create table n_2
+	as select a.*, b.year as year_1
+	from n_1 a left join n_1 b
+	on a.gvkey eq b.gvkey and a.year-1 eq b.year
+	order by gvkey, year, month;
+	quit;
+run; 
+
+proc sort data=n_2 nodupkey; by gvkey year month; run;
+
+data n_2; set n_2; 
+	if month_1 eq . then month_1=0;
+run;
+
+data n_3; set n_2; 
+	by gvkey; 
+	retain port_year port_month; 
+	if first.gvkey then do; 
+		port_month=0; 
+		port_year=year - &FirstYear; 
+	end; 
+	if month=&start then do; 
+		port_month=0; 
+		port_year=year - &FirstYear;
+	end;  
+	if month_1 + 1 ne month then do;
+		port_month=0; 
+		port_year=year - &FirstYear;
+	end;
+	port_month=port_month+1; 
+	port_year=port_year;
+run;  
+
+data n_4; set n_3; 
+	key_ = gvkey||port_year;
+	drop key;
+run;
+
+proc sort data=n_4; by key_ port_month; run;
+
+data n_5; set n_4;
+	by key_;
+	retain miss miss_year;
+	if port_year gt 0 and first.key_ and port_month eq 1 and month ne &start then miss=1;
+	if port_year gt 0 and first.key_ and port_month eq 1 and month eq &start then miss=0;
+miss=miss;
+run;
+proc sort data=n_5; by gvkey year month;run;
+data n_6; set n_5;
+	by gvkey;
+	retain miss_year;
+	if port_year gt 0 and not first.gvkey and year_1 + 1 ne year and month lt &start then miss_year=1;
+	if port_year gt 0 and not first.gvkey and year_1 + 1 ne year and month eq &start then miss_year=0;
+miss_year=miss_year;
+run;
+
+data n_6; set n_6;
+	/*if port_year gt 0;*/
+ 	if miss ne 1;
+	if miss_year ne 1;
+	if port_month le 12;		/* this one is risky because it manually removes everythign that counted over 12, it is best to check manually that these are not common*/
+run;
+data &dsout; set n_6;
+ 	drop miss miss_year key_ month_1 year_1;
+run;
+
+proc sort data=&dsout; by gvkey year month ;run; 
+
+/*cleanup*/
+proc datasets library=work; delete n_0 - n_6; quit;run;
+
+%mend;
